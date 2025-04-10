@@ -88,6 +88,18 @@ def main():
                             )
                             print("index.html not found, sending 404")
                             conn.sendall(response.encode("utf-8")) 
+                    elif path.startswith("/echo/"):
+                        msg =path[len("/echo/"):]
+
+                        response_body = f"{msg}"
+                        response = (
+                            "HTTP/1.1 200 OK\r\n"
+                            "Content-Type: text/plain\r\n"
+                            f"Content-Length: {len(response_body.encode('utf-8'))}\r\n"
+                            "\r\n"
+                            f"{response_body}"
+                        )
+
                     else:
                         # Handle other paths with 404 Not Found
                         response_body = "404 Not Found"
