@@ -2,6 +2,7 @@ import socket  # noqa: F401
 
 
 def main():
+   
     server_socket = socket.create_server(("localhost", 4221))
     server_socket.settimeout(1)
     
@@ -30,6 +31,7 @@ def main():
                     continue
 
                 request_line = request_lines[0]
+                headers = {h.split(": ")[0]: h.split(": ")[1:] for h in request_lines[1:] if ": " in h}
 
                 try:
                     method , path , http_version = request_line.split(" ")
@@ -88,6 +90,7 @@ def main():
                             )
                             print("index.html not found, sending 404")
                             conn.sendall(response.encode("utf-8")) 
+
                     elif path.startswith("/echo/"):
                         msg =path[len("/echo/"):]
 
@@ -99,6 +102,21 @@ def main():
                             "\r\n"
                             f"{response_body}"
                         )
+                        print(f"Sending echo response: {response_body}")
+                        conn.sendall(response.encode("utf-8"))
+
+                    elif path == "/user-agent":
+                        user_agent = headers.get("User-Agent", ["Unknown"])[0]
+                        response_body = f"{user_agent}"
+                        response = (
+                            "HTTP/1.1 200 OK\r\n"
+                            "Content-Type: text/plain\r\n"
+                            f"Content-Length: {len(response_body.encode('utf-8'))}\r\n"
+                            "\r\n"
+                            f"{response_body}"
+                        )
+                        print(f"Sending User-Agent response: {response_body}")
+                        conn.sendall(response.encode("utf-8"))
 
                     else:
                         # Handle other paths with 404 Not Found
