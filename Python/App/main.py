@@ -1,174 +1,139 @@
-import socket  # noqa: F401
+import socket
 
+def build_response(status_code, status_message, headers=None, content_type=None, body=None):
+    """
+    Build a complete HTTP response string.
+    """
+    response = f"HTTP/1.1 {status_code} {status_message}\r\n"
+    
+    if headers:
+        for key, value in headers.items():
+            response += f"{key}: {value}\r\n"
+    
+    if content_type:
+        response += f"Content-Type: {content_type}\r\n"
+    
+    body = body if body is not None else ""
+    response += f"Content-Length: {len(body.encode('utf-8'))}\r\n"
+    response += "\r\n"
+    response += body
+    
+    return response
+
+def route_request(method, path, headers):
+    if method == "GET":
+        if path == "/":
+            response_body = "<h1>Welcome to home page</h1>"
+            return build_response(
+                200, "OK",
+                content_type="text/html",
+                body=response_body
+            )
+
+        elif path == "/index.html":
+            try:
+                with open("app/index.html", "r", encoding="utf-8") as f:
+                    response_body = f.read()
+                return build_response(
+                    200, "OK",
+                    content_type="text/html",
+                    body=response_body
+                )
+            except FileNotFoundError:
+                response_body = "<h1>404 Not Found</h1><p>index.html not found.</p>"
+                return build_response(
+                    404, "Not Found",
+                    content_type="text/html",
+                    body=response_body
+                )
+
+        elif path.startswith("/echo/"):
+            msg = path[len("/echo/"):]
+            return build_response(
+                200, "OK",
+                content_type="text/plain",
+                body=msg
+            )
+
+        elif path == "/user-agent":
+            user_agent = headers.get("User-Agent", ["Unknown"])[0]
+            return build_response(
+                200, "OK",
+                content_type="text/plain",
+                body=user_agent
+            )
+
+        else:
+            return build_response(
+                404, "Not Found",
+                content_type="text/plain",
+                body="404 Not Found"
+            )
+    else:
+        return build_response(
+            405, "Method Not Allowed",
+            content_type="text/plain",
+            body="405 Method Not Allowed"
+        )
+
+def handle_connection(conn):
+    try:
+        data = conn.recv(1024).decode('utf-8')
+        print(f"Received: {data}")
+
+        request_lines = data.split("\r\n")
+        if not request_lines:
+            print("Empty request")
+            return
+
+        request_line = request_lines[0]
+        headers = {h.split(": ")[0]: h.split(": ")[1:] for h in request_lines[1:] if ": " in h}
+
+        try:
+            method, path, http_version = request_line.split(" ")
+        except ValueError:
+            print(f"Could not parse request line: {request_line}")
+            response = build_response(400, "Bad Request")
+            conn.sendall(response.encode())
+            return
+
+        print(f"Method: {method}, Path: {path}, Version: {http_version}")
+        response = route_request(method, path, headers)
+        conn.sendall(response.encode("utf-8"))
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        try:
+            error_response = build_response(500, "Internal Server Error")
+            conn.sendall(error_response.encode('utf-8'))
+        except Exception as send_e:
+            print(f"Failed to send error response: {send_e}")
+
+    finally:
+        conn.close()
+        print("Connection closed\n")
 
 def main():
-   
     server_socket = socket.create_server(("localhost", 4221))
     server_socket.settimeout(1)
-    
+
     try:
-        conn = None
         while True:
-            conn = None
-            
             try:
-                    
-                try:    
-                    # Wait for a connection
-                    conn, addr = server_socket.accept()
-                    print(f"connection from {addr}")
-                except socket.timeout:
-                    continue    
-
-                # Receive data from the client
-                data = conn.recv(1024).decode('utf-8')
-                print(f"received {data}")
-
-                request_lines = data.split("\r\n")
-                if not request_lines:
-                    print("request is empty")
-                    conn.close()
-                    continue
-
-                request_line = request_lines[0]
-                headers = {h.split(": ")[0]: h.split(": ")[1:] for h in request_lines[1:] if ": " in h}
-
-                try:
-                    method , path , http_version = request_line.split(" ")
-                except ValueError as e:
-                    print(f"could not parse request line: {request_line}")
-
-                    response ="HTTP/1.1 400 Bad Request\r\n\r\n"
-
-                    conn.sendall(response.encode())
-                    conn.close    
-                    continue
-
-                print(f"method: {method} path: {path} http_version: {http_version}")
-
-                # --- Routing and response construction ---
-
-                if method == "GET":
-                    if path == "/":
-                        response_body = "<h1>Welcome to home page</h1>"
-                        response = (
-                            "HTTP/1.1 200 OK\r\n"
-                            "content-type: text/html\r\n"
-                            f"content-length: {len(response_body.encode('utf-8'))} \r\n"
-                            "\r\n"
-                            f"{response_body}"
-                        )
-
-                        print("sending 200 OK for /")
-                        conn.sendall(response.encode('utf-8'))
-
-                    elif path == "/index.html":
-                        try:
-                            with open("app/index.html", "r" , encoding="utf-8") as f:
-                                response_body = f.read()
-                            content_length = len(response_body.encode('utf-8'))
-
-                            response =(
-                                "HTTP/1.1 200 OK\r\n"
-                                "content-type: text/html\r\n"
-                                f"content-length: {content_length}\r\n"
-                                "\r\n"
-                                f"{response_body}"
-                            )    
-
-                            print("sending 200 OK for index.html")
-                            conn.sendall(response.encode('utf-8'))
-
-                        except FileNotFoundError:
-                            response_body = "<h1>404 Not Found</h1><p>index.html not found.</p>"
-                            response = (
-                                "HTTP/1.1 404 Not Found\r\n"
-                                "Content-Type: text/html\r\n"
-                                f"Content-Length: {len(response_body.encode('utf-8'))}\r\n"
-                                "\r\n"
-                                f"{response_body}"
-                            )
-                            print("index.html not found, sending 404")
-                            conn.sendall(response.encode("utf-8")) 
-
-                    elif path.startswith("/echo/"):
-                        msg =path[len("/echo/"):]
-
-                        response_body = f"{msg}"
-                        response = (
-                            "HTTP/1.1 200 OK\r\n"
-                            "Content-Type: text/plain\r\n"
-                            f"Content-Length: {len(response_body.encode('utf-8'))}\r\n"
-                            "\r\n"
-                            f"{response_body}"
-                        )
-                        print(f"Sending echo response: {response_body}")
-                        conn.sendall(response.encode("utf-8"))
-
-                    elif path == "/user-agent":
-                        user_agent = headers.get("User-Agent", ["Unknown"])[0]
-                        response_body = f"{user_agent}"
-                        response = (
-                            "HTTP/1.1 200 OK\r\n"
-                            "Content-Type: text/plain\r\n"
-                            f"Content-Length: {len(response_body.encode('utf-8'))}\r\n"
-                            "\r\n"
-                            f"{response_body}"
-                        )
-                        print(f"Sending User-Agent response: {response_body}")
-                        conn.sendall(response.encode("utf-8"))
-
-                    else:
-                        # Handle other paths with 404 Not Found
-                        response_body = "404 Not Found"
-                        response = (
-                            "HTTP/1.1 404 Not Found\r\n"
-                            "Content-Type: text/plain\r\n"
-                            f"Content-Length: {len(response_body)}\r\n"
-                            "\r\n"
-                            f"{response_body}"
-                        )
-                        print(f"Sending 404 Not Found for {path}")
-                        conn.sendall(response.encode('utf-8'))
-                else:
-                    # Handle methods other than GET (Method Not Allowed)
-                    response_body = "405 Method Not Allowed"
-                    response = (
-                        "HTTP/1.1 405 Method Not Allowed\r\n"
-                        "Content-Type: text/plain\r\n"
-                        f"Content-Length: {len(response_body)}\r\n"
-                        "\r\n"
-                        f"{response_body}"
-                    )
-                    print(f"Sending 405 Method Not Allowed for method {method}")
-                    conn.sendall(response.encode('utf-8'))
-
-            except Exception as e:
-                print(f"An error occurred: {e}")
-                
-                if conn:
-                    try:
-                        error_response = "HTTP/1.1 500 Internal Server Error\r\n\r\n"
-                        conn.sendall(error_response.encode('utf-8'))
-                    except Exception as send_e:
-                        print(f"Failed to send error response: {send_e}")
-
-            finally:
-                
-                if conn:
-                    conn.close()
-                    print("Connection closed\n")
+                conn, addr = server_socket.accept()
+                print(f"Connection from {addr}")
+                handle_connection(conn)
+            except socket.timeout:
+                continue
     except KeyboardInterrupt:
         print("\nServer shutting down...")
     finally:
         server_socket.close()
         print("Server socket closed.")
-        print("Server stopped.")                
-        
+        print("Server stopped.")
 
 if __name__ == "__main__":
     main()
-                
 
 
 
