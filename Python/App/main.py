@@ -1,4 +1,5 @@
 import socket
+import threading
 
 def build_response(status_code, status_message, headers=None, content_type=None, body=None):
     """
@@ -122,7 +123,9 @@ def main():
             try:
                 conn, addr = server_socket.accept()
                 print(f"Connection from {addr}")
-                handle_connection(conn)
+                thread = threading.Thread(target=handle_connection, args=(conn,))
+                thread.daemon = True  # Optional: allow clean exit
+                thread.start()
             except socket.timeout:
                 continue
     except KeyboardInterrupt:
