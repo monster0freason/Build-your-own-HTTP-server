@@ -55,6 +55,26 @@ def route_request(method, path, headers):
                 content_type="text/plain",
                 body=msg
             )
+        
+        elif path.startswith("/files/"):
+            directory = "App/files"
+            filename = path[len("/files/"):]
+            try:
+                with open(f"{directory}/{filename}", "r", encoding="utf-8") as f:
+                    response_body = f.read()
+                return build_response(
+                    200, "OK",
+                    content_type="application/octet-stream",
+                    body=response_body
+                )
+            except FileNotFoundError:
+                response_body = "<h1>404 Not Found</h1><p>File not found.</p>"
+                return build_response(
+                    404, "Not Found",
+                    content_type="text/html",
+                    body=response_body
+                )
+
 
         elif path == "/user-agent":
             user_agent = headers.get("User-Agent", ["Unknown"])[0]
