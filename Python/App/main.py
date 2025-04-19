@@ -21,7 +21,7 @@ def build_response(status_code, status_message, headers=None, content_type=None,
     
     return response
 
-def route_request(method, path, headers):
+def route_request(method, path, headers, payload=None):
     if method == "GET":
         if path == "/":
             response_body = "<h1>Welcome to home page</h1>"
@@ -90,6 +90,28 @@ def route_request(method, path, headers):
                 content_type="text/plain",
                 body="404 Not Found"
             )
+        
+    elif method == "POST":
+
+        if path.startswith("/files/"):
+            directory = "App/files"
+            filename = path[len("/files/"):]
+            try:
+                with open(f"{directory}/{filename}", "w", encoding="utf-8") as f:
+                    f.write(payload)
+                return build_response(
+                    201, "Created",
+                    content_type="text/plain",
+                    body="File created successfully."
+                )
+            except Exception as e:
+                response_body = f"<h1>500 Internal Server Error</h1><p>{str(e)}</p>"
+                return build_response(
+                    500, "Internal Server Error",
+                    content_type="text/html",
+                    body=response_body
+                )
+    
     else:
         return build_response(
             405, "Method Not Allowed",
@@ -109,6 +131,7 @@ def handle_connection(conn):
 
         request_line = request_lines[0]
         headers = {h.split(": ")[0]: h.split(": ")[1:] for h in request_lines[1:] if ": " in h}
+        payload = request_lines[-1] if len(request_lines) > 1 else None
 
         try:
             method, path, http_version = request_line.split(" ")
@@ -119,7 +142,7 @@ def handle_connection(conn):
             return
 
         print(f"Method: {method}, Path: {path}, Version: {http_version}")
-        response = route_request(method, path, headers)
+        response = route_request(method, path, headers, payload)
         conn.sendall(response.encode("utf-8"))
 
     except Exception as e:
