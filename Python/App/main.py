@@ -21,6 +21,13 @@ def build_response(status_code, status_message, headers=None, content_type=None,
     
     return response
 
+def compress_data(payload):
+    """
+    Compress the payload using gzip.
+    """
+    
+    return payload
+
 def route_request(method, path, headers, payload=None):
     if method == "GET":
         if path == "/":
@@ -50,6 +57,14 @@ def route_request(method, path, headers, payload=None):
 
         elif path.startswith("/echo/"):
             msg = path[len("/echo/"):]
+            if headers.get("Accept-Encoding") == ["gzip"]:
+                msg = compress_data(msg)
+                return build_response(
+                    200, "OK",
+                    headers={"Content-Encoding": "gzip"},
+                    content_type="text/plain",
+                    body=msg
+                )
             return build_response(
                 200, "OK",
                 content_type="text/plain",
